@@ -261,7 +261,8 @@ void Overlay::DrawCircle(float x, float y, float radius, D3DCOLOR color, int seg
 void Overlay::DrawHealthBar(float x, float y, float w, float h, 
                              float health, float maxHealth) {
     float healthPercent = health / maxHealth;
-    healthPercent = max(0.0f, min(1.0f, healthPercent));
+    if (healthPercent < 0.0f) healthPercent = 0.0f;
+    if (healthPercent > 1.0f) healthPercent = 1.0f;
     
     // Background
     DrawFilledRect(x - 1, y - 1, w + 2, h + 2, D3DCOLOR_ARGB(200, 0, 0, 0));
