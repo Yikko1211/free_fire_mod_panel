@@ -226,4 +226,128 @@ void ImGui_ImplWin32_NewFrame() {
 
     // Update mouse position
     POINT mouse_pos;
-    
+    if (::GetCursorPos(&mouse_pos) && ::ScreenToClient(bd->hWnd, &mouse_pos)) {
+        io.AddMousePosEvent((float)mouse_pos.x, (float)mouse_pos.y);
+    }
+
+    // Update mouse buttons
+    io.AddMouseButtonEvent(0, (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
+    io.AddMouseButtonEvent(1, (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
+    io.AddMouseButtonEvent(2, (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
+
+    // Update OS mouse cursor
+    ImGuiMouseCursor mouse_cursor = io.MouseDrawCursor ? ImGuiMouseCursor_None : ImGui::GetMouseCursor();
+    if (bd->LastMouseCursor != mouse_cursor) {
+        bd->LastMouseCursor = mouse_cursor;
+        ImGui_ImplWin32_UpdateMouseCursor();
+    }
+}
+
+IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (ImGui::GetCurrentContext() == nullptr)
+        return 0;
+
+    ImGuiIO& io = ImGui::GetIO();
+
+    switch (msg) {
+    case WM_MOUSEMOVE:
+    case WM_NCMOUSEMOVE:
+        {
+            POINT mouse_pos = { (LONG)GET_X_LPARAM(lParam), (LONG)GET_Y_LPARAM(lParam) };
+            if (msg == WM_NCMOUSEMOVE && ::ScreenToClient(hwnd, &mouse_pos) == FALSE)
+                return 0;
+            io.AddMousePosEvent((float)mouse_pos.x, (float)mouse_pos.y);
+            break;
+        }
+    case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK:
+    case WM_RBUTTONDOWN: case WM_RBUTTONDBLCLK:
+    case WM_MBUTTONDOWN: case WM_MBUTTONDBLCLK:
+    case WM_XBUTTONDOWN: case WM_XBUTTONDBLCLK:
+        {
+            int button = 0;
+            if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONDBLCLK) { button = 0; }
+            if (msg == WM_RBUTTONDOWN || msg == WM_RBUTTONDBLCLK) { button = 1; }
+            if (msg == WM_MBUTTONDOWN || msg == WM_MBUTTONDBLCLK) { button = 2; }
+            if (msg == WM_XBUTTONDOWN || msg == WM_XBUTTONDBLCLK) { button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? 3 : 4; }
+            io.AddMouseButtonEvent(button, true);
+            if (!ImGui::IsAnyMouseDown() && ::GetCapture() == nullptr)
+                ::SetCapture(hwnd);
+            return 0;
+        }
+    case WM_LBUTTONUP:
+    case WM_RBUTTONUP:
+    case WM_MBUTTONUP:
+    case WM_XBUTTONUP:
+        {
+            int button = 0;
+            if (msg == WM_LBUTTONUP) { button = 0; }
+            if (msg == WM_RBUTTONUP) { button = 1; }
+            if (msg == WM_MBUTTONUP) { button = 2; }
+            if (msg == WM_XBUTTONUP) { button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? 3 : 4; }
+            io.AddMouseButtonEvent(button, false);
+            if (!ImGui::IsAnyMouseDown() && ::GetCapture() == hwnd)
+                ::ReleaseCapture();
+            return 0;
+        }
+    case WM_MOUSEWHEEL:
+        io.AddMouseWheelEvent(0.0f, (float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA);
+        return 0;
+    case WM_MOUSEHWHEEL:
+        io.AddMouseWheelEvent((float)GET_WHEEL_DELTA_WPARAM(wParam) / (float)WHEEL_DELTA, 0.0f);
+        return 0;
+    case WM_KEYDOWN:
+    case WM_KEYUP:
+    case WM_SYSKEYDOWN:
+    case WM_SYSKEYUP:
+        {
+            const bool is_key_down = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN);
+            if (wParam < 256) {
+                ImGui_ImplWin32_AddKeyEvent(ImGui_ImplWin32_VirtualKeyToImGuiKey(wParam),
+                    is_key_down, (int)wParam, (int)((lParam >> 16) & 0x1FF));
+
+                // Modifiers
+                if (wParam == VK_SHIFT) {
+                    if (::GetAsyncKeyState(VK_LSHIFT) & 0x8000)
+                        ImGui_ImplWin32_AddKeyEvent(ImGuiKey_LeftShift, is_key_down, VK_LSHIFT);
+                    if (::GetAsyncKeyState(VK_RSHIFT) & 0x8000)
+                        ImGui_ImplWin32_AddKeyEvent(ImGuiKey_RightShift, is_key_down, VK_RSHIFT);
+                } else if (wParam == VK_CONTROL) {
+                    if (::GetAsyncKeyState(VK_LCONTROL) & 0x8000)
+                        ImGui_ImplWin32_AddKeyEvent(ImGuiKey_LeftCtrl, is_key_down, VK_LCONTROL);
+                    if (::GetAsyncKeyState(VK_RCONTROL) & 0x8000)
+                        ImGui_ImplWin32_AddKeyEvent(ImGuiKey_RightCtrl, is_key_down, VK_RCONTROL);
+                } else if (wParam == VK_MENU) {
+                    if (::GetAsyncKeyState(VK_LMENU) & 0x8000)
+                        ImGui_ImplWin32_AddKeyEvent(ImGuiKey_LeftAlt, is_key_down, VK_LMENU);
+                    if (::GetAsyncKeyState(VK_RMENU) & 0x8000)
+                        ImGui_ImplWin32_AddKeyEvent(ImGuiKey_RightAlt, is_key_down, VK_RMENU);
+                }
+            }
+            return 0;
+        }
+    case WM_CHAR:
+        if (::IsWindowUnicode(hwnd)) {
+            if (wParam > 0 && wParam < 0x10000)
+                io.AddInputCharacterUTF16((unsigned short)wParam);
+        } else {
+            wchar_t wch = 0;
+            ::MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, (char*)&wParam, 1, &wch, 1);
+            io.AddInputCharacter(wch);
+        }
+        return 0;
+    case WM_SETCURSOR:
+        if (LOWORD(lParam) == HTCLIENT && ImGui_ImplWin32_UpdateMouseCursor())
+            return 1;
+        return 0;
+    }
+    return 0;
+}
+
+void ImGui_ImplWin32_EnableDpiAwareness() {
+    SetProcessDPIAware();
+}
+
+float ImGui_ImplWin32_GetDpiScaleForHwnd(void* hwnd) {
+    (void)hwnd;
+    return 1.0f;
+}
