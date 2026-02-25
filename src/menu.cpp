@@ -18,6 +18,9 @@ bool Menu::Initialize(IDirect3DDevice9* device, HWND window) {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.IniFilename = nullptr;
     
+    // Configurar plataforma IME (compatible con versiones nuevas de ImGui)
+    ImGui::GetMainViewport()->PlatformHandleRaw = (void*)window;
+    
     ImGui_ImplWin32_Init(window);
     ImGui_ImplDX9_Init(device);
     
