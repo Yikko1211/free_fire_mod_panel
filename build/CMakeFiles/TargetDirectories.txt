@@ -1,0 +1,3 @@
+C:/Users/USER/Documents/GitHub/free_fire_mod_panel/build/CMakeFiles/FFModMenu.dir
+C:/Users/USER/Documents/GitHub/free_fire_mod_panel/build/CMakeFiles/ALL_BUILD.dir
+C:/Users/USER/Documents/GitHub/free_fire_mod_panel/build/CMakeFiles/ZERO_CHECK.dir
